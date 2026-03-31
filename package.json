@@ -1,7 +1,12 @@
 {
   "name": "svelte-navigator-lite",
-  "version": "0.1.0",
+  "version": "1.0.2",
   "description": "A lightweight router for Svelte 5",
+  "readme": "README.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeremyjfleming/svelte-navigator-lite"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -17,14 +22,20 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "happy-dom": "^17.0.0",
     "svelte": "^5.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
   },
   "keywords": [
     "svelte",
@@ -33,5 +44,4 @@
     "svelte5"
   ],
   "license": "MIT"
-
 }
