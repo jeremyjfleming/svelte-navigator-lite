@@ -110,30 +110,16 @@ Add `optional: true` to make a trailing segment optional. Optional segments must
 
 ## Search Params
 
-### Required search params
-
-Declared in `searchParams`. The route only matches if all listed params are present in the URL. Their values are captured into `router.params`.
+Declared in `searchParams`. Listed params are captured into `router.params` if present in the URL, and silently ignored if absent. They never affect whether a route matches.
 
 ```ts
 'password-reset': {
     rootPath: 'password-reset',
     segments: [],
-    searchParams: ['token'],  // matches /password-reset?token=abc only
+    searchParams: ['token'],
 }
-// router.params.token === 'abc'
-```
-
-### Optional search params
-
-Declared in `optionalSearchParams`. Captured into `router.params` if present, silently ignored if absent. Do not affect whether the route matches.
-
-```ts
-'signup': {
-    rootPath: 'signup',
-    segments: [],
-    optionalSearchParams: ['redirect'],  // matches /signup and /signup?redirect=/dashboard
-}
-// router.params.redirect === '/dashboard' (or undefined if absent)
+// /password-reset?token=abc  →  router.params.token === 'abc'
+// /password-reset            →  router.params === {}
 ```
 
 ---
@@ -248,6 +234,16 @@ Returns `true` if `router.route` is any of the provided route names.
 ```ts
 class:active={router.matches(['dashboard', 'settings'])}
 ```
+
+### `router.registerRoute(name, route)`
+
+Register a new route.
+```ts
+registerRoute('settings', {
+    rootPath: 'settings',
+    segments: [],
+    routeGuards: [guards.authenticated],
+})
 
 ### `page`
 

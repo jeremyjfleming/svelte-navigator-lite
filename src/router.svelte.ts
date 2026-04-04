@@ -56,7 +56,6 @@ export type Route = {
     rootPath: string;
     segments: ({ name?: string, enforceVal?: string, optional?: boolean })[];
     searchParams?: string[];
-    optionalSearchParams?: string[];
     routeGuards?: RouteGuard[];
 }
 
@@ -120,15 +119,7 @@ export function _createRouter(routeList: RouteList = {} as RouteList) {
             if (match && route.searchParams) {
                 for (const key of route.searchParams) {
                     const val = searchParams.get(key);
-                    if (val === null) { match = false; break; }
                     params[key] = val;
-                }
-            }
-
-            if (match && route.optionalSearchParams) {
-                for (const key of route.optionalSearchParams) {
-                    const val = searchParams.get(key);
-                    if (val !== null) params[key] = val;
                 }
             }
 

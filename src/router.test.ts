@@ -158,41 +158,30 @@ describe('parseUrl — required searchParams', () => {
         fallback: { rootPath: 'fallback', segments: [] },
     };
 
-    it('matches and captures a required search param', () => {
+    it('captures a search param when present', () => {
         const r = makeRouter(routes, 'fallback');
         r.parseUrl('http://localhost/password-reset?token=abc123');
         expect(r.route).toBe('password-reset');
         expect(r.params).toEqual({ token: 'abc123' });
     });
 
-    it('does not match when a required search param is absent', () => {
+    it('still matches when a search param is absent', () => {
         const r = makeRouter(routes, 'fallback');
         r.parseUrl('http://localhost/password-reset');
-        expect(r.notFound).toBe(true);
-    });
-});
-
-describe('parseUrl — optional searchParams', () => {
-    const routes: RouteList = {
-        signup: {
-            rootPath: 'signup',
-            segments: [],
-            optionalSearchParams: ['redirect'],
-        },
-    };
-
-    it('captures optional search param when present', () => {
-        const r = makeRouter(routes, 'signup');
-        r.parseUrl('http://localhost/signup?redirect=%2Fdashboard');
-        expect(r.route).toBe('signup');
-        expect(r.params).toEqual({ redirect: '/dashboard' });
-    });
-
-    it('still matches when optional search param is absent', () => {
-        const r = makeRouter(routes, 'signup');
-        r.parseUrl('http://localhost/signup');
-        expect(r.route).toBe('signup');
+        expect(r.route).toBe('password-reset');
         expect(r.params).toEqual({});
+    });
+
+    it('captures multiple search params independently', () => {
+        const r = makeRouter({
+            page: {
+                rootPath: 'items',
+                segments: [],
+                searchParams: ['page', 'sort'],
+            },
+        }, 'page');
+        r.parseUrl('http://localhost/items?page=2');
+        expect(r.params).toEqual({ page: '2' });
     });
 });
 
