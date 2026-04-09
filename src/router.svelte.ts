@@ -49,13 +49,13 @@ export async function goto(path: string, { replaceState = false } = {}) {
 interface RouterState {
     current: string;
     params: Record<string, string>;
+    searchParams: Record<string, string>;
     notFound: boolean;
 }
 
 export type Route = {
     rootPath: string;
     segments: ({ name?: string, enforceVal?: string, optional?: boolean })[];
-    searchParams?: string[];
     routeGuards?: RouteGuard[];
 }
 
@@ -77,6 +77,7 @@ export function _createRouter(routeList: RouteList = {} as RouteList) {
     let state = $state<RouterState>({
         current: '',
         params: {},
+        searchParams: {},
         notFound: false,
     });
 
@@ -116,16 +117,10 @@ export function _createRouter(routeList: RouteList = {} as RouteList) {
                 }
             }
 
-            if (match && route.searchParams) {
-                for (const key of route.searchParams) {
-                    const val = searchParams.get(key);
-                    params[key] = val;
-                }
-            }
-
-            if (match) {
+            if (match === true) { // not sure why I need an === true here but it doesnt work without it for some reason
                 state.current = routeName;
                 state.params = params;
+                state.searchParams = Object.fromEntries(searchParams.entries());
                 state.notFound = false;
                 return;
             }
@@ -133,6 +128,7 @@ export function _createRouter(routeList: RouteList = {} as RouteList) {
 
         state.current = rootRoute;
         state.params = {};
+        state.searchParams = {};
         state.notFound = true;
 
         
@@ -145,6 +141,10 @@ export function _createRouter(routeList: RouteList = {} as RouteList) {
 
         get params() {
             return state.params;
+        },
+
+        get searchParams() {
+            return state.searchParams;
         },
 
         get notFound() {
@@ -165,7 +165,7 @@ export function _createRouter(routeList: RouteList = {} as RouteList) {
 
         parseUrl,
 
-        async navigate(route: string, params?: Record<string, string>) {
+        async navigate(route: string, params?: Record<string, string>, searchParams?: Record<string, string>) {
             let path: string = routes[route].rootPath;
 
             for (const guard of routes[route].routeGuards || []) {
@@ -185,19 +185,13 @@ export function _createRouter(routeList: RouteList = {} as RouteList) {
                     }
                     path += `/${params[segment.name]}`;
                 }
-                
             }
 
-            if (routes[route].searchParams) {
-                const searchParams = new URLSearchParams();
-                for (const param of routes[route].searchParams) {
-                    if (params && params[param]) {
-                        searchParams.set(param, params[param]!);
-                    }
-                }
-                path += `?${searchParams.toString()}`;
+            if (searchParams) {
+                const qs = new URLSearchParams(searchParams).toString();
+                if (qs) path += `?${qs}`;
             }
-            
+
             await goto(path);
         },
 

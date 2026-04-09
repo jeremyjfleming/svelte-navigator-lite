@@ -110,32 +110,30 @@ Add `optional: true` to make a trailing segment optional. Optional segments must
 
 ## Search Params
 
-Declared in `searchParams`. Listed params are captured into `router.params` if present in the URL, and silently ignored if absent. They never affect whether a route matches.
+Search params are automatically captured into `router.searchParams` when present in the URL. No configuration is needed — they never affect whether a route matches.
 
 ```ts
-'password-reset': {
-    rootPath: 'password-reset',
-    segments: [],
-    searchParams: ['token'],
-}
-// /password-reset?token=abc  →  router.params.token === 'abc'
-// /password-reset            →  router.params === {}
+// /password-reset?token=abc  →  router.searchParams.token === 'abc'
+// /password-reset            →  router.searchParams === {}
 ```
 
 ---
 
 ## Navigating
 
-### `router.navigate(route, params?)`
+### `router.navigate(route, params?, searchParams?)`
 
-Navigate to a named route. Params are used to fill dynamic segments and search params.
+Navigate to a named route. Path params fill dynamic segments; pass search params separately as the third argument.
 
 ```ts
 router.navigate('event', { eventId: '123' });
 // → /event/123
 
-router.navigate('password-reset', { token: 'abc123' });
+router.navigate('password-reset', undefined, { token: 'abc123' });
 // → /password-reset?token=abc123
+
+router.navigate('event', { eventId: '123' }, { tab: 'details' });
+// → /event/123?tab=details
 ```
 
 Throws if a required param is missing.
@@ -201,7 +199,11 @@ The label of the currently matched route. Falls back to `defaultRoute` if no rou
 
 ### `router.params`
 
-An object containing all captured values — path params, required search params, and any present optional search params.
+An object containing the captured path param values for the current route.
+
+### `router.searchParams`
+
+An object containing the search params present in the current URL. Empty object when none are present.
 
 ### `router.notFound`
 
@@ -215,7 +217,7 @@ An object containing all captured values — path params, required search params
 {/if}
 ```
 
-### `router.navigate(route, params?)`
+### `router.navigate(route, params?, searchParams?)`
 
 Navigate to a named route, applying guards and building the URL from the route definition.
 

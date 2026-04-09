@@ -148,12 +148,11 @@ describe('parseUrl — optional segments', () => {
     });
 });
 
-describe('parseUrl — required searchParams', () => {
+describe('parseUrl — search params', () => {
     const routes: RouteList = {
         'password-reset': {
             rootPath: 'password-reset',
             segments: [],
-            searchParams: ['token'],
         },
         fallback: { rootPath: 'fallback', segments: [] },
     };
@@ -162,26 +161,31 @@ describe('parseUrl — required searchParams', () => {
         const r = makeRouter(routes, 'fallback');
         r.parseUrl('http://localhost/password-reset?token=abc123');
         expect(r.route).toBe('password-reset');
-        expect(r.params).toEqual({ token: 'abc123' });
+        expect(r.searchParams).toEqual({ token: 'abc123' });
     });
 
-    it('still matches when a search param is absent', () => {
+    it('still matches when no search params are present', () => {
         const r = makeRouter(routes, 'fallback');
         r.parseUrl('http://localhost/password-reset');
         expect(r.route).toBe('password-reset');
-        expect(r.params).toEqual({});
+        expect(r.searchParams).toEqual({});
     });
 
-    it('captures multiple search params independently', () => {
+    it('captures multiple search params', () => {
         const r = makeRouter({
-            page: {
-                rootPath: 'items',
-                segments: [],
-                searchParams: ['page', 'sort'],
-            },
-        }, 'page');
-        r.parseUrl('http://localhost/items?page=2');
-        expect(r.params).toEqual({ page: '2' });
+            items: { rootPath: 'items', segments: [] },
+        }, 'items');
+        r.parseUrl('http://localhost/items?page=2&sort=asc');
+        expect(r.searchParams).toEqual({ page: '2', sort: 'asc' });
+    });
+
+    it('captures search params alongside path params', () => {
+        const r = makeRouter({
+            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
+        }, 'event');
+        r.parseUrl('http://localhost/event/123?tab=details');
+        expect(r.params).toEqual({ eventId: '123' });
+        expect(r.searchParams).toEqual({ tab: 'details' });
     });
 });
 
@@ -277,16 +281,40 @@ describe('navigate()', () => {
         await expect(r.navigate('event')).rejects.toThrow('Missing parameter eventId');
     });
 
-    it('appends search params to the path', async () => {
+    it('appends search params when provided', async () => {
         const r = makeRouter({
-            'password-reset': {
-                rootPath: 'password-reset',
-                segments: [],
-                searchParams: ['token'],
-            },
+            'password-reset': { rootPath: 'password-reset', segments: [] },
         }, 'password-reset');
-        await r.navigate('password-reset', { token: 'abc' });
+        await r.navigate('password-reset', undefined, { token: 'abc' });
         expect(history.pushState).toHaveBeenCalledWith({}, '', '/password-reset?token=abc');
+    });
+
+    it('appends multiple search params', async () => {
+        const r = makeRouter({
+            items: { rootPath: 'items', segments: [] },
+        }, 'items');
+        await r.navigate('items', undefined, { page: '2', sort: 'asc' });
+        const call = (history.pushState as ReturnType<typeof vi.fn>).mock.calls[0][2] as string;
+        const url = new URL(call, 'http://localhost');
+        expect(url.pathname).toBe('/items');
+        expect(url.searchParams.get('page')).toBe('2');
+        expect(url.searchParams.get('sort')).toBe('asc');
+    });
+
+    it('navigates with both path params and search params', async () => {
+        const r = makeRouter({
+            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
+        }, 'event');
+        await r.navigate('event', { eventId: '42' }, { tab: 'details' });
+        expect(history.pushState).toHaveBeenCalledWith({}, '', '/event/42?tab=details');
+    });
+
+    it('does not append search params when not provided', async () => {
+        const r = makeRouter({
+            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
+        }, 'event');
+        await r.navigate('event', { eventId: '42' });
+        expect(history.pushState).toHaveBeenCalledWith({}, '', '/event/42');
     });
 
     it('redirects when a guard fn returns true', async () => {
