@@ -77,7 +77,7 @@ function _createRouter() {
         get params()       { return state.params; },
         get searchParams() { return state.searchParams; },
         get notFound()     { return state.notFound; },
-        get meta()         { return compiled.find(r => r.name === state.current)?.meta; },
+        get meta()         { const name = state.current; return compiled.find(r => r.name === name)?.meta; },
 
         is(route: string)            { return state.current === route; },
         matches(routes: string[])    { return routes.includes(state.current); },
