@@ -90,6 +90,7 @@ function _createRouter() {
             }
             const resolved = applyGuards(routeName);
             const route = compiled.find(r => r.name === resolved);
+            if (!route) return;
             // If guards redirected us to a different route, don't forward the original params.
             const resolvedParams = resolved === routeName ? params : {};
             const path = buildPath(route.pattern, resolvedParams);
