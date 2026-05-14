@@ -31,10 +31,10 @@ Define your routes and guards, then call `createRouter` on mount.
             routes: [
                 { name: 'cal',      pattern: '/cal'                                   },
                 { name: 'cal-date', pattern: '/cal/:mm/:dd/:yyyy'                     },
-                { name: 'event',    pattern: '/event/:eventId',   overlay: true       },
-                { name: 'edit',     pattern: '/event/:eventId/edit', overlay: true    },
-                { name: 'login',    pattern: '/login',  guards: ['unauth'], overlay: true },
-                { name: 'signup',   pattern: '/signup', guards: ['unauth'], overlay: true },
+                { name: 'event',    pattern: '/event/:eventId',      meta: { overlay: true } },
+                { name: 'edit',     pattern: '/event/:eventId/edit', meta: { overlay: true } },
+                { name: 'login',    pattern: '/login',  guards: ['unauth'], meta: { overlay: true } },
+                { name: 'signup',   pattern: '/signup', guards: ['unauth'], meta: { overlay: true } },
             ],
             guards: {
                 auth:   { condition: () => !auth.isValid(), redirectTo: 'login' },
@@ -46,7 +46,7 @@ Define your routes and guards, then call `createRouter` on mount.
 </script>
 
 <AppShell />
-{#if router.overlay}
+{#if router.meta?.overlay}
     <svelte:component this={currentOverlay} />
 {/if}
 ```
@@ -90,7 +90,7 @@ import { router } from 'svelte-navigator-lite';
 router.route        // current route name: string
 router.params       // path params: Record<string, string>
 router.searchParams // query params: Record<string, string>
-router.overlay      // true if the current route has overlay: true
+router.meta         // meta object for the current route (or undefined)
 router.notFound     // true if the URL matched no route and the fallback was used
 
 router.is('cal')                 // true if current route === 'cal'
@@ -99,15 +99,16 @@ router.matches(['cal', 'event']) // true if current route is in the list
 
 All properties are reactive — use them in Svelte templates or `$effect` blocks and they update automatically on navigation.
 
-## Overlays
+## Route meta
 
-Mark a route with `overlay: true` to indicate it renders on top of the base layout rather than replacing it. The router exposes `router.overlay` so your root component can conditionally render the overlay without any separate bookkeeping.
+Attach arbitrary metadata to any route via the `meta` field. The router exposes `router.meta` so your components can read it reactively.
 
 ```typescript
 routes: [
-    { name: 'cal',   pattern: '/cal'                                },
-    { name: 'event', pattern: '/event/:eventId', overlay: true      },
-    { name: 'edit',  pattern: '/event/:eventId/edit', overlay: true },
+    { name: 'cal',   pattern: '/cal'                                              },
+    { name: 'event', pattern: '/event/:eventId',      meta: { overlay: true }    },
+    { name: 'edit',  pattern: '/event/:eventId/edit', meta: { overlay: true }    },
+    { name: 'admin', pattern: '/admin',               meta: { role: 'admin' }    },
 ]
 ```
 
@@ -115,13 +116,13 @@ routes: [
 <!-- The base layout always renders -->
 <AppShell />
 
-<!-- Overlay components mount on top when their route is active -->
-{#if router.overlay}
+<!-- Use any meta value to drive rendering -->
+{#if router.meta?.overlay}
     <svelte:component this={overlayMap[router.route]} />
 {/if}
 ```
 
-`overlay` is purely a metadata flag — the router does not render anything itself. How overlays are displayed (modal, drawer, fullscreen panel, etc.) is entirely up to your components.
+`meta` is not interpreted by the router — it is plain data for your components to use however they need.
 
 ## Guards
 
@@ -184,7 +185,7 @@ await goto('/some/path', { replaceState: true }); // replace instead of push
 
 ## Migrating from v1
 
-The `rootPath` + `segments` route definition is replaced by a single `pattern` string, `routeGuards` inline on each route are replaced by named guards defined once, and the new `overlay` flag replaces any separate modal-route maps you maintained manually.
+The `rootPath` + `segments` route definition is replaced by a single `pattern` string, `routeGuards` inline on each route are replaced by named guards defined once, and the new `meta` field replaces any separate modal-route maps you maintained manually.
 
 ```typescript
 // v1
@@ -195,6 +196,6 @@ The `rootPath` + `segments` route definition is replaced by a single `pattern` s
 }
 
 // v2
-{ name: 'edit', pattern: '/event/:eventId/edit', guards: ['auth'], overlay: true }
+{ name: 'edit', pattern: '/event/:eventId/edit', guards: ['auth'], meta: { overlay: true } }
 // guard defined once: auth: { condition: () => !auth.isValid(), redirectTo: 'login' }
 ```
