@@ -1,239 +1,124 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { _createRouter } from './router.svelte';
-import type { RouteList } from './router.svelte';
+import type { RouteDefinition, Guard, RouterConfig } from './types';
 
-// Creates a fresh isolated router instance with the given routes and default.
-function makeRouter(routes: RouteList, defaultRoute: string) {
+function makeRouter(
+    routes: RouteDefinition[],
+    guards: Record<string, Guard> = {},
+    fallback: string = routes[0]?.name ?? '',
+) {
     const r = _createRouter();
-    for (const [name, route] of Object.entries(routes)) {
-        r.registerRoute(name, route);
-    }
-    r.rootRoute = defaultRoute;
+    r.init({ routes, guards, fallback } satisfies RouterConfig);
     return r;
 }
 
-// ─── parseUrl ────────────────────────────────────────────────────────────────
+// ─── parseUrl ─────────────────────────────────────────────────────────────────
 
 describe('parseUrl — static routes', () => {
-    it('matches a rootPath with no segments', () => {
-        const r = makeRouter({ login: { rootPath: 'login', segments: [] } }, 'login');
+    it('matches a simple path', () => {
+        const r = makeRouter([{ name: 'login', pattern: '/login' }], {}, 'login');
         r.parseUrl('http://localhost/login');
         expect(r.route).toBe('login');
         expect(r.params).toEqual({});
         expect(r.notFound).toBe(false);
     });
 
-    it('does not match rootPath when extra segments are present', () => {
-        const r = makeRouter({
-            login: { rootPath: 'login', segments: [] },
-            fallback: { rootPath: 'fallback', segments: [] },
-        }, 'fallback');
-        r.parseUrl('http://localhost/login/extra');
+    it('falls back to the fallback route on no match', () => {
+        const r = makeRouter([
+            { name: 'cal', pattern: '/cal' },
+            { name: 'login', pattern: '/login' },
+        ], {}, 'cal');
+        r.parseUrl('http://localhost/unknown');
+        expect(r.route).toBe('cal');
         expect(r.notFound).toBe(true);
-        expect(r.route).toBe('fallback');
     });
-});
 
-describe('parseUrl — dynamic params', () => {
-    it('captures a named segment into params', () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-        }, 'event');
+    it('clears params when falling back', () => {
+        const r = makeRouter([{ name: 'event', pattern: '/event/:eventId' }], {}, 'event');
         r.parseUrl('http://localhost/event/123');
-        expect(r.route).toBe('event');
         expect(r.params).toEqual({ eventId: '123' });
-        expect(r.notFound).toBe(false);
-    });
-
-    it('does not match when required named segment is absent', () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-            fallback: { rootPath: 'fallback', segments: [] },
-        }, 'fallback');
-        r.parseUrl('http://localhost/event');
-        expect(r.notFound).toBe(true);
-    });
-});
-
-describe('parseUrl — enforceVal segments', () => {
-    it('matches when enforceVal is correct', () => {
-        const r = makeRouter({
-            'create-cal': { rootPath: 'calendar', segments: [{ enforceVal: 'create' }] },
-        }, 'create-cal');
-        r.parseUrl('http://localhost/calendar/create');
-        expect(r.route).toBe('create-cal');
-    });
-
-    it('does not match when enforceVal differs', () => {
-        const r = makeRouter({
-            'create-cal': { rootPath: 'calendar', segments: [{ enforceVal: 'create' }] },
-            fallback: { rootPath: 'fallback', segments: [] },
-        }, 'fallback');
-        r.parseUrl('http://localhost/calendar/delete');
-        expect(r.notFound).toBe(true);
-    });
-});
-
-describe('parseUrl — mixed segments', () => {
-    it('matches name followed by enforceVal', () => {
-        const r = makeRouter({
-            'edit-event': {
-                rootPath: 'event',
-                segments: [{ name: 'eventId' }, { enforceVal: 'edit' }],
-            },
-        }, 'edit-event');
-        r.parseUrl('http://localhost/event/123/edit');
-        expect(r.route).toBe('edit-event');
-        expect(r.params).toEqual({ eventId: '123' });
-    });
-});
-
-describe('parseUrl — segment over-matching prevention', () => {
-    it('does not match when URL has more segments than the route defines', () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-            fallback: { rootPath: 'fallback', segments: [] },
-        }, 'fallback');
-        r.parseUrl('http://localhost/event/123/unexpected');
-        expect(r.notFound).toBe(true);
-    });
-
-    it('differentiates routes with the same rootPath but different segment counts', () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-            'edit-event': {
-                rootPath: 'event',
-                segments: [{ name: 'eventId' }, { enforceVal: 'edit' }],
-            },
-        }, 'event');
-
-        r.parseUrl('http://localhost/event/123');
-        expect(r.route).toBe('event');
-
-        r.parseUrl('http://localhost/event/123/edit');
-        expect(r.route).toBe('edit-event');
-    });
-});
-
-describe('parseUrl — optional segments', () => {
-    const routes: RouteList = {
-        event: {
-            rootPath: 'event',
-            segments: [
-                { name: 'eventId' },
-                { enforceVal: 'edit', optional: true },
-            ],
-        },
-        fallback: { rootPath: 'fallback', segments: [] },
-    };
-
-    it('matches when optional trailing segment is absent', () => {
-        const r = makeRouter(routes, 'fallback');
-        r.parseUrl('http://localhost/event/123');
-        expect(r.route).toBe('event');
-        expect(r.params).toEqual({ eventId: '123' });
-    });
-
-    it('matches when optional trailing segment is present', () => {
-        const r = makeRouter(routes, 'fallback');
-        r.parseUrl('http://localhost/event/123/edit');
-        expect(r.route).toBe('event');
-        expect(r.params).toEqual({ eventId: '123' });
-    });
-
-    it('does not match when optional enforceVal has wrong value', () => {
-        const r = makeRouter(routes, 'fallback');
-        r.parseUrl('http://localhost/event/123/delete');
-        expect(r.notFound).toBe(true);
-    });
-});
-
-describe('parseUrl — search params', () => {
-    const routes: RouteList = {
-        'password-reset': {
-            rootPath: 'password-reset',
-            segments: [],
-        },
-        fallback: { rootPath: 'fallback', segments: [] },
-    };
-
-    it('captures a search param when present', () => {
-        const r = makeRouter(routes, 'fallback');
-        r.parseUrl('http://localhost/password-reset?token=abc123');
-        expect(r.route).toBe('password-reset');
-        expect(r.searchParams).toEqual({ token: 'abc123' });
-    });
-
-    it('still matches when no search params are present', () => {
-        const r = makeRouter(routes, 'fallback');
-        r.parseUrl('http://localhost/password-reset');
-        expect(r.route).toBe('password-reset');
-        expect(r.searchParams).toEqual({});
-    });
-
-    it('captures multiple search params', () => {
-        const r = makeRouter({
-            items: { rootPath: 'items', segments: [] },
-        }, 'items');
-        r.parseUrl('http://localhost/items?page=2&sort=asc');
-        expect(r.searchParams).toEqual({ page: '2', sort: 'asc' });
-    });
-
-    it('captures search params alongside path params', () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-        }, 'event');
-        r.parseUrl('http://localhost/event/123?tab=details');
-        expect(r.params).toEqual({ eventId: '123' });
-        expect(r.searchParams).toEqual({ tab: 'details' });
-    });
-});
-
-describe('parseUrl — fallback and notFound', () => {
-    it('falls back to defaultRoute and sets notFound=true on no match', () => {
-        const r = makeRouter({ login: { rootPath: 'login', segments: [] } }, 'login');
-        r.parseUrl('http://localhost/unknown/path');
-        expect(r.route).toBe('login');
-        expect(r.notFound).toBe(true);
+        r.parseUrl('http://localhost/nowhere');
         expect(r.params).toEqual({});
     });
 
     it('sets notFound=false on a real match', () => {
-        const r = makeRouter({ login: { rootPath: 'login', segments: [] } }, 'login');
-        r.parseUrl('http://localhost/login');
+        const r = makeRouter([{ name: 'cal', pattern: '/cal' }], {}, 'cal');
+        r.parseUrl('http://localhost/cal');
         expect(r.notFound).toBe(false);
-    });
-
-    it('clears params when falling back', () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-        }, 'event');
-        r.parseUrl('http://localhost/event/123');
-        expect(r.params).toEqual({ eventId: '123' });
-
-        r.parseUrl('http://localhost/nowhere');
-        expect(r.params).toEqual({});
     });
 });
 
-// ─── is() and matches() ───────────────────────────────────────────────────────
-
-describe('is() and matches()', () => {
-    it('is() returns true only for the current route', () => {
-        const r = makeRouter({ login: { rootPath: 'login', segments: [] } }, 'login');
-        r.parseUrl('http://localhost/login');
-        expect(r.is('login')).toBe(true);
-        expect(r.is('other')).toBe(false);
+describe('parseUrl — params', () => {
+    it('captures a required param', () => {
+        const r = makeRouter([{ name: 'event', pattern: '/event/:eventId' }], {}, 'event');
+        r.parseUrl('http://localhost/event/abc');
+        expect(r.params).toEqual({ eventId: 'abc' });
     });
 
-    it('matches() returns true if current route is in the array', () => {
-        const r = makeRouter({
-            login: { rootPath: 'login', segments: [] },
-            signup: { rootPath: 'signup', segments: [] },
-        }, 'login');
+    it('captures multiple params', () => {
+        const r = makeRouter([{ name: 'cal-date', pattern: '/cal/:mm/:dd/:yyyy' }], {}, 'cal-date');
+        r.parseUrl('http://localhost/cal/05/13/2026');
+        expect(r.params).toEqual({ mm: '05', dd: '13', yyyy: '2026' });
+    });
+
+    it('captures an optional param when present', () => {
+        const r = makeRouter([{ name: 'settings', pattern: '/settings/:page?' }], {}, 'settings');
+        r.parseUrl('http://localhost/settings/account');
+        expect(r.params).toEqual({ page: 'account' });
+    });
+
+    it('matches without an optional param', () => {
+        const r = makeRouter([{ name: 'settings', pattern: '/settings/:page?' }], {}, 'settings');
+        r.parseUrl('http://localhost/settings');
+        expect(r.route).toBe('settings');
+    });
+});
+
+describe('parseUrl — search params', () => {
+    it('captures a search param', () => {
+        const r = makeRouter([{ name: 'reset', pattern: '/password-reset' }], {}, 'reset');
+        r.parseUrl('http://localhost/password-reset?token=xyz');
+        expect(r.searchParams).toEqual({ token: 'xyz' });
+    });
+
+    it('captures multiple search params', () => {
+        const r = makeRouter([{ name: 'items', pattern: '/items' }], {}, 'items');
+        r.parseUrl('http://localhost/items?page=2&sort=asc');
+        expect(r.searchParams).toEqual({ page: '2', sort: 'asc' });
+    });
+
+    it('returns empty object when no search params', () => {
+        const r = makeRouter([{ name: 'cal', pattern: '/cal' }], {}, 'cal');
+        r.parseUrl('http://localhost/cal');
+        expect(r.searchParams).toEqual({});
+    });
+
+    it('captures search params alongside path params', () => {
+        const r = makeRouter([{ name: 'event', pattern: '/event/:eventId' }], {}, 'event');
+        r.parseUrl('http://localhost/event/42?tab=details');
+        expect(r.params).toEqual({ eventId: '42' });
+        expect(r.searchParams).toEqual({ tab: 'details' });
+    });
+});
+
+// ─── is() / matches() ─────────────────────────────────────────────────────────
+
+describe('is() and matches()', () => {
+    it('is() returns true only for the active route', () => {
+        const r = makeRouter([{ name: 'login', pattern: '/login' }], {}, 'login');
+        r.parseUrl('http://localhost/login');
+        expect(r.is('login')).toBe(true);
+        expect(r.is('cal')).toBe(false);
+    });
+
+    it('matches() returns true when the active route is in the list', () => {
+        const r = makeRouter([
+            { name: 'login', pattern: '/login' },
+            { name: 'signup', pattern: '/signup' },
+        ], {}, 'login');
         r.parseUrl('http://localhost/login');
         expect(r.matches(['login', 'signup'])).toBe(true);
-        expect(r.matches(['signup', 'other'])).toBe(false);
+        expect(r.matches(['signup', 'cal'])).toBe(false);
     });
 });
 
@@ -244,119 +129,180 @@ describe('navigate()', () => {
         vi.spyOn(history, 'pushState').mockImplementation(() => {});
         vi.spyOn(window, 'dispatchEvent').mockImplementation(() => true);
     });
+    afterEach(() => vi.restoreAllMocks());
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-    });
-
-    it('builds the correct path for a static route', async () => {
-        const r = makeRouter({ login: { rootPath: 'login', segments: [] } }, 'login');
+    it('navigates to a static route', async () => {
+        const r = makeRouter([{ name: 'login', pattern: '/login' }], {}, 'login');
         await r.navigate('login');
         expect(history.pushState).toHaveBeenCalledWith({}, '', '/login');
     });
 
-    it('builds the correct path with a dynamic segment', async () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-        }, 'event');
+    it('builds the correct path with a param', async () => {
+        const r = makeRouter([{ name: 'event', pattern: '/event/:eventId' }], {}, 'event');
         await r.navigate('event', { eventId: '42' });
         expect(history.pushState).toHaveBeenCalledWith({}, '', '/event/42');
     });
 
-    it('includes enforceVal segments in the path', async () => {
-        const r = makeRouter({
-            'edit-event': {
-                rootPath: 'event',
-                segments: [{ name: 'eventId' }, { enforceVal: 'edit' }],
-            },
-        }, 'edit-event');
-        await r.navigate('edit-event', { eventId: '42' });
-        expect(history.pushState).toHaveBeenCalledWith({}, '', '/event/42/edit');
+    it('builds a path with multiple params and a literal segment', async () => {
+        const r = makeRouter([{ name: 'edit', pattern: '/event/:eventId/edit' }], {}, 'edit');
+        await r.navigate('edit', { eventId: '7' });
+        expect(history.pushState).toHaveBeenCalledWith({}, '', '/event/7/edit');
     });
 
-    it('throws when a required param is missing', async () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-        }, 'event');
-        await expect(r.navigate('event')).rejects.toThrow('Missing parameter eventId');
-    });
-
-    it('appends search params when provided', async () => {
-        const r = makeRouter({
-            'password-reset': { rootPath: 'password-reset', segments: [] },
-        }, 'password-reset');
-        await r.navigate('password-reset', undefined, { token: 'abc' });
+    it('appends search params', async () => {
+        const r = makeRouter([{ name: 'reset', pattern: '/password-reset' }], {}, 'reset');
+        await r.navigate('reset', {}, { token: 'abc' });
         expect(history.pushState).toHaveBeenCalledWith({}, '', '/password-reset?token=abc');
     });
 
-    it('appends multiple search params', async () => {
-        const r = makeRouter({
-            items: { rootPath: 'items', segments: [] },
-        }, 'items');
-        await r.navigate('items', undefined, { page: '2', sort: 'asc' });
-        const call = (history.pushState as ReturnType<typeof vi.fn>).mock.calls[0][2] as string;
-        const url = new URL(call, 'http://localhost');
-        expect(url.pathname).toBe('/items');
-        expect(url.searchParams.get('page')).toBe('2');
-        expect(url.searchParams.get('sort')).toBe('asc');
+    it('does not append a query string when searchParams is empty', async () => {
+        const r = makeRouter([{ name: 'cal', pattern: '/cal' }], {}, 'cal');
+        await r.navigate('cal');
+        expect(history.pushState).toHaveBeenCalledWith({}, '', '/cal');
     });
 
-    it('navigates with both path params and search params', async () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-        }, 'event');
-        await r.navigate('event', { eventId: '42' }, { tab: 'details' });
-        expect(history.pushState).toHaveBeenCalledWith({}, '', '/event/42?tab=details');
+    it('warns and does nothing for an unknown route', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const r = makeRouter([{ name: 'cal', pattern: '/cal' }], {}, 'cal');
+        await r.navigate('nonexistent');
+        expect(history.pushState).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('"nonexistent"'));
+        warn.mockRestore();
     });
+});
 
-    it('does not append search params when not provided', async () => {
-        const r = makeRouter({
-            event: { rootPath: 'event', segments: [{ name: 'eventId' }] },
-        }, 'event');
-        await r.navigate('event', { eventId: '42' });
-        expect(history.pushState).toHaveBeenCalledWith({}, '', '/event/42');
+// ─── guards ───────────────────────────────────────────────────────────────────
+
+describe('guards — navigate()', () => {
+    beforeEach(() => {
+        vi.spyOn(history, 'pushState').mockImplementation(() => {});
+        vi.spyOn(window, 'dispatchEvent').mockImplementation(() => true);
     });
+    afterEach(() => vi.restoreAllMocks());
 
-    it('redirects when a guard fn returns true', async () => {
-        const r = makeRouter({
-            login: { rootPath: 'login', segments: [] },
-            dashboard: {
-                rootPath: 'dashboard',
-                segments: [],
-                routeGuards: [{ fn: () => true, redirectTo: 'login' }],
-            },
-        }, 'login');
-        await r.navigate('dashboard');
+    it('redirects when the guard condition is true', async () => {
+        const r = makeRouter(
+            [
+                { name: 'login', pattern: '/login' },
+                { name: 'cal', pattern: '/cal', guards: ['authenticated'] },
+            ],
+            { authenticated: { condition: () => true, redirectTo: 'login' } },
+            'login',
+        );
+        await r.navigate('cal');
         expect(history.pushState).toHaveBeenCalledWith({}, '', '/login');
     });
 
-    it('proceeds when a guard fn returns false', async () => {
-        const r = makeRouter({
-            login: { rootPath: 'login', segments: [] },
-            dashboard: {
-                rootPath: 'dashboard',
-                segments: [],
-                routeGuards: [{ fn: () => false, redirectTo: 'login' }],
-            },
-        }, 'login');
-        await r.navigate('dashboard');
-        expect(history.pushState).toHaveBeenCalledWith({}, '', '/dashboard');
+    it('proceeds when the guard condition is false', async () => {
+        const r = makeRouter(
+            [
+                { name: 'login', pattern: '/login' },
+                { name: 'cal', pattern: '/cal', guards: ['authenticated'] },
+            ],
+            { authenticated: { condition: () => false, redirectTo: 'login' } },
+            'login',
+        );
+        await r.navigate('cal');
+        expect(history.pushState).toHaveBeenCalledWith({}, '', '/cal');
+    });
+
+    it('does not forward params when redirected by a guard', async () => {
+        const r = makeRouter(
+            [
+                { name: 'login', pattern: '/login' },
+                { name: 'event', pattern: '/event/:eventId', guards: ['authenticated'] },
+            ],
+            { authenticated: { condition: () => true, redirectTo: 'login' } },
+            'login',
+        );
+        await r.navigate('event', { eventId: '99' });
+        expect(history.pushState).toHaveBeenCalledWith({}, '', '/login');
     });
 
     it('stops at the first triggered guard', async () => {
         const secondGuard = vi.fn().mockReturnValue(false);
-        const r = makeRouter({
-            login: { rootPath: 'login', segments: [] },
-            dashboard: {
-                rootPath: 'dashboard',
-                segments: [],
-                routeGuards: [
-                    { fn: () => true, redirectTo: 'login' },
-                    { fn: secondGuard, redirectTo: 'login' },
-                ],
+        const r = makeRouter(
+            [
+                { name: 'login', pattern: '/login' },
+                { name: 'cal', pattern: '/cal', guards: ['first', 'second'] },
+            ],
+            {
+                first:  { condition: () => true,  redirectTo: 'login' },
+                second: { condition: secondGuard, redirectTo: 'login' },
             },
-        }, 'login');
-        await r.navigate('dashboard');
+            'login',
+        );
+        await r.navigate('cal');
         expect(secondGuard).not.toHaveBeenCalled();
+        expect(history.pushState).toHaveBeenCalledWith({}, '', '/login');
+    });
+
+    it('chains through multiple guards, each passing', async () => {
+        const r = makeRouter(
+            [
+                { name: 'login', pattern: '/login' },
+                { name: 'cal', pattern: '/cal', guards: ['a', 'b'] },
+            ],
+            {
+                a: { condition: () => false, redirectTo: 'login' },
+                b: { condition: () => false, redirectTo: 'login' },
+            },
+            'login',
+        );
+        await r.navigate('cal');
+        expect(history.pushState).toHaveBeenCalledWith({}, '', '/cal');
+    });
+
+    it('detects guard cycles and warns instead of hanging', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const r = makeRouter(
+            [
+                { name: 'a', pattern: '/a', guards: ['toB'] },
+                { name: 'b', pattern: '/b', guards: ['toA'] },
+            ],
+            {
+                toA: { condition: () => true, redirectTo: 'a' },
+                toB: { condition: () => true, redirectTo: 'b' },
+            },
+            'a',
+        );
+        await r.navigate('a');
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('cycle'));
+        warn.mockRestore();
+    });
+});
+
+describe('guards — parseUrl()', () => {
+    beforeEach(() => {
+        vi.spyOn(history, 'replaceState').mockImplementation(() => {});
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it('redirects on URL parse when guard fires', () => {
+        const r = makeRouter(
+            [
+                { name: 'login', pattern: '/login' },
+                { name: 'cal', pattern: '/cal', guards: ['authenticated'] },
+            ],
+            { authenticated: { condition: () => true, redirectTo: 'login' } },
+            'login',
+        );
+        r.parseUrl('http://localhost/cal');
+        expect(r.route).toBe('login');
+        expect(history.replaceState).toHaveBeenCalledWith({}, '', '/login');
+    });
+
+    it('does not redirect when guard does not fire', () => {
+        const r = makeRouter(
+            [
+                { name: 'login', pattern: '/login' },
+                { name: 'cal', pattern: '/cal', guards: ['authenticated'] },
+            ],
+            { authenticated: { condition: () => false, redirectTo: 'login' } },
+            'login',
+        );
+        r.parseUrl('http://localhost/cal');
+        expect(r.route).toBe('cal');
+        expect(history.replaceState).not.toHaveBeenCalled();
     });
 });

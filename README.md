@@ -1,6 +1,6 @@
 # svelte-navigator-lite
 
-A lightweight, label-based router for Svelte 5. Define named routes that map to URL patterns, then use `router.route` reactively — not just to show components, but for any logic that depends on where you are.
+A lightweight, pattern-based router for Svelte 5. Routes are defined with familiar URL patterns, guards are reusable named functions, and the reactive `router` singleton integrates directly with Svelte runes.
 
 ## Installation
 
@@ -8,261 +8,159 @@ A lightweight, label-based router for Svelte 5. Define named routes that map to 
 npm install svelte-navigator-lite
 ```
 
-## Setup
+## Quick start
 
-Call `createRouter` once at your app's entry point (e.g. `App.svelte`):
-
-```ts
-import { createRouter, router } from 'svelte-navigator-lite';
-import type { RouteList } from 'svelte-navigator-lite';
-
-const routes: RouteList = {
-    'login': {
-        rootPath: 'login',
-        segments: [],
-    },
-    'dashboard': {
-        rootPath: 'dashboard',
-        segments: [],
-    },
-};
-
-createRouter(routes, 'dashboard'); // second argument is the default/fallback route
-```
-
-Then use `router.route` anywhere in your Svelte components — it's a reactive Svelte 5 `$state` value:
+Define your routes and guards, then call `createRouter` on mount.
 
 ```svelte
-{#if router.is('login')}
-    <Login />
-{:else if router.is('dashboard')}
-    <Dashboard />
-{/if}
+<!-- App.svelte -->
+<script lang="ts">
+    import { onMount } from 'svelte';
+    import { createRouter, router } from 'svelte-navigator-lite';
+    import { auth } from '$stores/auth.svelte';
+    import AppShell from '$lib/components/AppShell.svelte';
+
+    onMount(() => {
+        createRouter({
+            routes: [
+                { name: 'cal',      pattern: '/cal'                        },
+                { name: 'cal-date', pattern: '/cal/:mm/:dd/:yyyy'          },
+                { name: 'event',    pattern: '/event/:eventId'             },
+                { name: 'edit',     pattern: '/event/:eventId/edit'        },
+                { name: 'login',    pattern: '/login',  guards: ['unauth'] },
+                { name: 'signup',   pattern: '/signup', guards: ['unauth'] },
+            ],
+            guards: {
+                auth:   { condition: () => !auth.isValid(), redirectTo: 'login' },
+                unauth: { condition: () =>  auth.isValid(), redirectTo: 'cal'   },
+            },
+            fallback: 'cal',
+        });
+    });
+</script>
+
+<AppShell />
 ```
 
----
+## Route patterns
 
-## Defining Routes
+Patterns follow standard URL conventions.
 
-Every route has a `rootPath` — the first URL segment — and an array of `segments` for everything after it.
+| Pattern | Example URL | Params |
+|---|---|---|
+| `/cal` | `/cal` | `{}` |
+| `/event/:eventId` | `/event/abc-123` | `{ eventId: 'abc-123' }` |
+| `/event/:eventId/edit` | `/event/abc-123/edit` | `{ eventId: 'abc-123' }` |
+| `/cal/:mm/:dd/:yyyy` | `/cal/05/13/2026` | `{ mm: '05', dd: '13', yyyy: '2026' }` |
+| `/settings/:page?` | `/settings` or `/settings/account` | `{}` or `{ page: 'account' }` |
 
-### Static routes
-
-```ts
-'login': {
-    rootPath: 'login',  // matches /login
-    segments: [],
-}
-```
-
-### Dynamic params
-
-Use `name` to capture a URL segment into `router.params`:
-
-```ts
-'event': {
-    rootPath: 'event',
-    segments: [{ name: 'eventId' }],  // matches /event/123
-}
-// router.params.eventId === '123'
-```
-
-### Enforced static segments
-
-Use `enforceVal` to require a literal string at that position:
-
-```ts
-'create-calendar': {
-    rootPath: 'calendar',
-    segments: [{ enforceVal: 'create' }],  // matches /calendar/create only
-}
-```
-
-### Mixed segments
-
-`enforceVal` and `name` segments can be combined in any order:
-
-```ts
-'edit-event': {
-    rootPath: 'event',
-    segments: [
-        { name: 'eventId' },        // matches /event/:eventId/edit
-        { enforceVal: 'edit' },
-    ],
-}
-```
-
-### Optional segments
-
-Add `optional: true` to make a trailing segment optional. Optional segments must come after all required segments.
-
-```ts
-'event': {
-    rootPath: 'event',
-    segments: [
-        { name: 'eventId' },
-        { enforceVal: 'edit', optional: true },  // matches /event/123 AND /event/123/edit
-    ],
-}
-```
-
----
-
-## Search Params
-
-Search params are automatically captured into `router.searchParams` when present in the URL. No configuration is needed — they never affect whether a route matches.
-
-```ts
-// /password-reset?token=abc  →  router.searchParams.token === 'abc'
-// /password-reset            →  router.searchParams === {}
-```
-
----
+Append `?` to a param name to make it optional. Optional params must come at the end of the pattern.
 
 ## Navigating
 
-### `router.navigate(route, params?, searchParams?)`
+```typescript
+import { router } from 'svelte-navigator-lite';
 
-Navigate to a named route. Path params fill dynamic segments; pass search params separately as the third argument.
+// Static route
+router.navigate('login');
 
-```ts
+// With path params
 router.navigate('event', { eventId: '123' });
-// → /event/123
 
-router.navigate('password-reset', undefined, { token: 'abc123' });
-// → /password-reset?token=abc123
-
-router.navigate('event', { eventId: '123' }, { tab: 'details' });
-// → /event/123?tab=details
+// With path params + search params
+router.navigate('edit', { eventId: '123' }, { from: 'calendar' });
 ```
 
-Throws if a required param is missing.
+`navigate` returns a `Promise<void>`. Guards are evaluated before navigation — if a guard fires, the router redirects instead and original params are not forwarded.
 
-### `goto(path)`
+## Reading state
 
-Lower-level navigation to a raw path. Accepts an optional `{ replaceState: true }` option to replace instead of push.
+```typescript
+import { router } from 'svelte-navigator-lite';
 
-```ts
-import { goto } from 'svelte-navigator-lite';
+router.route        // current route name: string
+router.params       // path params: Record<string, string>
+router.searchParams // query params: Record<string, string>
+router.notFound     // true if the URL matched no route and the fallback was used
 
-goto('/login');
-goto('/login', { replaceState: true });
+router.is('cal')              // true if current route === 'cal'
+router.matches(['cal', 'event']) // true if current route is in the list
 ```
 
----
+All properties are reactive — use them in Svelte templates or `$effect` blocks and they update automatically on navigation.
 
-## Route Guards
+## Guards
 
-Guards run before navigation and redirect if their condition is met. `fn` returning `true` triggers the redirect.
+Guards are defined once in `createRouter` and referenced by name in route definitions.
 
-```ts
-import type { RouteGuard } from 'svelte-navigator-lite';
-
-const guards = {
-    authenticated: {
-        fn: () => !auth.isValid(),   // redirect if NOT authenticated
-        redirectTo: 'login',
-    } satisfies RouteGuard,
-    unauthenticated: {
-        fn: () => auth.isValid(),    // redirect if already authenticated
-        redirectTo: 'dashboard',
-    } satisfies RouteGuard,
-};
-
-const routes: RouteList = {
-    'login': {
-        rootPath: 'login',
-        segments: [],
-        routeGuards: [guards.unauthenticated],
+```typescript
+createRouter({
+    routes: [
+        { name: 'cal',          pattern: '/cal',          guards: ['auth']  },
+        { name: 'login',        pattern: '/login',        guards: ['unauth'] },
+        { name: 'verify-email', pattern: '/verify-email', guards: ['unauth'] },
+        { name: 'login-check',  pattern: '/login',        guards: ['unauth', 'emailCheck'] },
+    ],
+    guards: {
+        auth: {
+            condition: () => !auth.isValid(),
+            redirectTo: 'login',
+        },
+        unauth: {
+            condition: () => auth.isValid(),
+            redirectTo: 'cal',
+        },
+        emailCheck: {
+            condition: () => auth.containsCreds() && !auth.user?.verified,
+            redirectTo: 'verify-email',
+        },
     },
-    'dashboard': {
-        rootPath: 'dashboard',
-        segments: [],
-        routeGuards: [guards.authenticated],
-    },
-};
+    fallback: 'cal',
+});
 ```
 
-Guards run in order and stop at the first redirect.
+**`condition`** — called before entering the route. Return `true` to trigger the redirect.
 
----
+**`redirectTo`** — route name to navigate to instead.
 
-## API Reference
+Multiple guards on a route are checked in order; the first one that fires wins. Guard redirects are also checked for guards (recursively), with cycle detection to prevent infinite loops.
 
-### `createRouter(routes, defaultRoute)`
+## `page` store
 
-Registers all routes and sets the fallback route. Parses the current URL immediately. Must be called once before using `router`.
+A Svelte readable store that emits `{ url: URL }` on every navigation. Compatible with SvelteKit's `$app/stores` page store shape.
 
-### `router.route`
-
-The label of the currently matched route. Falls back to `defaultRoute` if no route matches.
-
-### `router.params`
-
-An object containing the captured path param values for the current route.
-
-### `router.searchParams`
-
-An object containing the search params present in the current URL. Empty object when none are present.
-
-### `router.notFound`
-
-`true` when the current URL did not match any defined route and the router fell back to `defaultRoute`. Use this to render a 404 state without needing a dedicated catch-all route.
-
-```svelte
-{#if router.notFound}
-    <NotFound />
-{:else if router.is('dashboard')}
-    <Dashboard />
-{/if}
-```
-
-### `router.navigate(route, params?, searchParams?)`
-
-Navigate to a named route, applying guards and building the URL from the route definition.
-
-### `router.is(route)`
-
-Returns `true` if `router.route === route`. Useful for active link styling.
-
-```ts
-class:active={router.is('dashboard')}
-```
-
-### `router.matches(routes)`
-
-Returns `true` if `router.route` is any of the provided route names.
-
-```ts
-class:active={router.matches(['dashboard', 'settings'])}
-```
-
-### `router.registerRoute(name, route)`
-
-Register a new route.
-```ts
-registerRoute('settings', {
-    rootPath: 'settings',
-    segments: [],
-    routeGuards: [guards.authenticated],
-})
-
-### `page`
-
-A readable Svelte store that emits `{ url: URL }` and updates on every navigation. Useful when you need the raw URL.
-
-```ts
+```typescript
 import { page } from 'svelte-navigator-lite';
 
-$page.url.pathname;
+page.subscribe(({ url }) => {
+    console.log(url.pathname);
+});
 ```
 
----
+## `goto`
 
-## Matching Rules
+Low-level path navigation. Prefer `router.navigate` for named routes.
 
-- Routes are matched in the order they are defined — first match wins.
-- `rootPath` is always required and must match the first URL segment exactly.
-- Segment count must be between `required segments + 1` and `total segments + 1` (the `+1` accounts for `rootPath`).
-- A route with no segments only matches its `rootPath` with nothing after it (e.g. `/login` not `/login/extra`).
-- Unmatched URLs fall back to the `defaultRoute`.
+```typescript
+import { goto } from 'svelte-navigator-lite';
+
+await goto('/some/path');
+await goto('/some/path', { replaceState: true }); // replace instead of push
+```
+
+## Migrating from v1
+
+The `rootPath` + `segments` route definition is replaced by a single `pattern` string, and `routeGuards` inline on each route are replaced by named guards defined once.
+
+```typescript
+// v1
+'edit': {
+    rootPath: 'event',
+    segments: [{ name: 'eventId' }, { enforceVal: 'edit' }],
+    routeGuards: [{ fn: () => !auth.isValid(), redirectTo: 'login' }],
+}
+
+// v2
+{ name: 'edit', pattern: '/event/:eventId/edit', guards: ['auth'] }
+// with guard defined once in createRouter: auth: { condition: () => !auth.isValid(), redirectTo: 'login' }
+```

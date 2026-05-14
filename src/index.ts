@@ -1,4 +1,2 @@
-// svelte-navigator-lite
-export { createRouter, router, page, goto } from './router.svelte';
-
-export type { Route, RouteList, Router, RouteGuard } from './router.svelte';
+export { createRouter, router, page, goto, _createRouter } from './router.svelte.js';
+export type { RouteDefinition, Guard, RouterConfig } from './types.js';
