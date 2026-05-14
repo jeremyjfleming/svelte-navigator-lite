@@ -30,5 +30,9 @@
     "vitest": "^3.0.0"
   },
   "keywords": ["svelte", "router", "navigation", "svelte5"],
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeremyjfleming/svelte-navigator-lite"
+  }
 }
