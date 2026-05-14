@@ -77,6 +77,7 @@ function _createRouter() {
         get params()       { return state.params; },
         get searchParams() { return state.searchParams; },
         get notFound()     { return state.notFound; },
+        get overlay()      { return compiled.find(r => r.name === state.current)?.overlay ?? false; },
 
         is(route: string)            { return state.current === route; },
         matches(routes: string[])    { return routes.includes(state.current); },

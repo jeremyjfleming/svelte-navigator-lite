@@ -6,6 +6,7 @@ type CompiledRoute = {
     regex: RegExp;
     paramNames: string[];
     guards: string[];
+    overlay: boolean;
 };
 
 export type RouteMatch = {
@@ -35,6 +36,7 @@ export function compileRoutes(routes: RouteDefinition[]): CompiledRoute[] {
             regex: new RegExp(`^${regexStr}/?$`),
             paramNames,
             guards: route.guards ?? [],
+            overlay: route.overlay ?? false,
         };
     });
 }
