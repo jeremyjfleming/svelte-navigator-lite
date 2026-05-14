@@ -1,5 +1,8 @@
 # svelte-navigator-lite
 
+[![Publish Package](https://github.com/jeremyjfleming/svelte-navigator-lite/actions/workflows/npm-publish-github-packages.yml/badge.svg)](https://github.com/jeremyjfleming/svelte-navigator-lite/actions/workflows/npm-publish-github-packages.yml)
+[![npm version](https://img.shields.io/npm/v/svelte-navigator-lite)](https://www.npmjs.com/package/svelte-navigator-lite)
+
 A lightweight, pattern-based router for Svelte 5. Routes are defined with familiar URL patterns, guards are reusable named functions, and the reactive `router` singleton integrates directly with Svelte runes.
 
 ## Installation
